@@ -1,41 +1,55 @@
-# iBAD Autopeças — protótipo atualizado
+iBAD AUTOPECAS — ETAPA 3: PAINEL DO VENDEDOR + AUTENTICACAO
 
-Protótipo React + Vite para testar solicitações de peças, caixa de entrada dos vendedores e orçamento manual.
+O QUE ESTA VERSAO FAZ
+- Mantem o formulario publico do mecanico conectado ao Supabase.
+- Consulta pedidos por codigo pelo portal do mecanico.
+- Usa Supabase Auth para o login da equipe (nao aceita mais qualquer usuario/senha).
+- Carrega a lista de solicitacoes diretamente do banco para vendedor/admin.
+- Salva preco, disponibilidade e filial de cada item no Supabase.
+- Registra o orcamento e muda o status para "Aguardando resposta do mecanico" quando todos os itens estiverem completos.
+- Salva aprovacao/recusa usando a funcao RPC ja criada.
+- Exclui solicitacoes pelo banco, somente para usuarios autenticados da equipe.
 
-## Requisitos
-- Node.js instalado (npm incluído)
-- Visual Studio Code
+ANTES DE USAR
+1. Faca backup da pasta anterior. NAO apague a pasta anterior.
+2. Extraia esta versao para uma nova pasta.
+3. Copie o arquivo .env da versao que ja funciona para a raiz desta nova pasta, ao lado de package.json.
+   Nao compartilhe o .env e nao o envie ao GitHub.
+4. No Supabase > SQL Editor, execute o arquivo:
+   supabase/migrations/002_painel_vendedor.sql
+   Ele deve ser executado depois da migration 001 ja aplicada.
+5. No terminal do VS Code, execute npm.cmd install e depois npm.cmd run build.
+6. Se o build terminar sem erros, execute npm.cmd run dev e abra o localhost informado.
 
-## Executar
-1. Abra esta pasta no VS Code.
-2. Abra Terminal > Novo Terminal.
-3. Execute `npm.cmd install` (no PowerShell do Windows).
-4. Execute `npm.cmd run dev`.
-5. Abra o endereço mostrado pelo Vite, normalmente `http://localhost:5173`.
+CRIAR O PRIMEIRO USUARIO INTERNO (ADMIN DE TESTE)
+1. No Supabase, entre em Authentication > Users > Add user.
+2. Crie um usuario com e-mail e senha de teste. Nao use credenciais pessoais reutilizadas.
+3. Copie o UUID/ID desse usuario na lista de Users.
+4. No SQL Editor, execute este comando substituindo os valores:
 
-## Login demonstrativo
-Entre em Painel do vendedor e informe qualquer usuário e senha não vazios. Isso **não é autenticação real**.
+insert into public.perfis (id, nome, perfil, filial)
+values ('COLE-AQUI-O-UUID-DO-USUARIO', 'Administrador de teste', 'admin', 'Matriz');
 
-## O que há nesta versão
-- Portal do mecânico sem cadastro, com inclusão de várias peças e geração de código.
-- Caixa de entrada do vendedor com solicitações ordenadas por data, pesquisa, filtros e seleção de pedidos.
-- Indicadores de solicitações novas, em orçamento e atendidas.
-- Orçamento manual com preço, disponibilidade e filial de origem.
-- Painel administrativo e as cinco unidades: Matriz, Nova Caxias, Ilha do Governador, Nova Iguaçu e Teresópolis.
-- Persistência no `localStorage` e sincronização entre abas abertas no mesmo navegador.
-- Tema escuro refinado e layout responsivo.
+5. Saia do portal e entre no Painel do vendedor ou Visao administrativa com o e-mail e senha criados.
 
-## Limitações importantes
-Esta ainda é uma demonstração local. Os dados ficam no navegador e **não são compartilhados entre computadores ou celulares diferentes**. A sincronização automática funciona entre abas do mesmo navegador. O login é fictício, não há banco remoto nem integração com o estoque da empresa. Não use dados reais nem coloque esta versão em produção.
+CRIAR VENDEDORES
+Repita Authentication > Users > Add user para cada vendedor e insira um perfil correspondente:
 
-Para uso real, a próxima etapa é configurar Supabase (banco compartilhado, autenticação e permissões por perfil/filial), publicar com HTTPS e avaliar a API ou outro meio de integração do sistema de estoque existente.
+insert into public.perfis (id, nome, perfil, filial)
+values ('UUID-DO-VENDEDOR', 'Nome do vendedor', 'vendedor', 'Matriz');
 
+Use para filial uma destas opcoes: Matriz, Nova Caxias, Ilha do Governador, Nova Iguacu, Teresopolis.
 
-## Excluir solicitações/orçamentos
-No painel do vendedor, abra uma solicitação e use o botão vermelho **Excluir orçamento**. O sistema pede confirmação antes de excluir. A exclusão remove o registro do armazenamento local deste navegador; nesta demonstração não existe lixeira nem recuperação.
+TESTE
+- Crie uma solicitacao ficticia pelo portal do mecanico.
+- Entre como admin/vendedor com a conta criada.
+- Atualize a lista, abra a solicitacao, informe preco, disponibilidade e filial para cada item.
+- Clique em Salvar orcamento.
+- Consulte o mesmo codigo em janela anonima/outro navegador; o status e o orcamento devem aparecer.
+- Teste a aprovacao/recusa e confirme na tabela decisoes.
 
-
-## Aceite ou recusa do orçamento
-O mecânico pode consultar o código e, quando todos os itens tiverem preço e disponibilidade preenchidos e o vendedor enviar o orçamento, aceitar ou recusar. A recusa permite registrar um motivo. Alterações feitas pelo vendedor exigem novo envio para aprovação.
-
-**Importante:** esta versão continua usando localStorage. As decisões só ficam disponíveis no mesmo navegador/origem. Para compartilhar entre computadores e celulares, publique o site e conecte um banco online (por exemplo Supabase); isso ainda não está configurado neste protótipo.
+LIMITACOES / SEGURANCA
+- O fluxo atual de acompanhamento usa codigo curto AUTO-12345. Isso serve apenas para teste controlado; antes de producao deve ser substituido por token imprevisivel mais longo, com limitacao de tentativas e monitoramento.
+- A decisao publica por codigo tambem depende desse codigo curto. Nao use dados reais ou divulgue codigos antes do reforco.
+- Ainda e necessario testar esta migracao no projeto Supabase real e revisar as politicas RLS. Nao considerar pronto para producao.
+- GitHub Pages publica somente o frontend. Nunca colocar service_role/secret key no frontend; apenas a publishable key no .env local (e, para deploy, configurada de forma consciente como variavel do build).

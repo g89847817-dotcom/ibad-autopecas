@@ -1,5 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { criarSolicitacao, consultarSolicitacao, responderOrcamento, entrarEquipe, restaurarSessaoEquipe, sairEquipe, listarSolicitacoesEquipe, salvarOrcamentoEquipe, excluirSolicitacaoEquipe } from './supabaseApi';
+import {
+  criarSolicitacao,
+  consultarSolicitacao,
+  responderOrcamento,
+  entrarEquipe,
+  restaurarSessaoEquipe,
+  sairEquipe,
+  listarSolicitacoesEquipe,
+  salvarOrcamentoEquipe,
+  excluirSolicitacaoEquipe,
+  listarVendedores,
+  cadastrarVendedor,
+  editarVendedor,
+  alterarStatusVendedor,
+  redefinirSenhaVendedor
+} from './supabaseApi';
 import { Wrench, Store, LayoutDashboard, ClipboardList, Search, Plus, Trash2, Copy, CheckCircle2, Clock3, Package, MapPin, LogIn, Menu, X, ArrowUpRight, CarFront, Boxes, RefreshCw } from 'lucide-react';
 
 const BRANCHES = ['Matriz', 'Nova Caxias', 'Ilha do Governador', 'Nova Iguaçu', 'Teresópolis'];
@@ -20,6 +35,16 @@ function App(){
   const [role,setRole] = useState('');
   const [saving,setSaving] = useState(false);
   const [login,setLogin] = useState({user:'',pass:''});
+  const [vendedores, setVendedores] = useState([]);
+const [carregandoVendedores, setCarregandoVendedores] = useState(false);
+const [vendedorEditando, setVendedorEditando] = useState(null);
+const [formVendedor, setFormVendedor] = useState({
+  nome: '',
+  usuario: '',
+  senha: '',
+  filial: 'Matriz'
+});
+const [mostrarFormularioVendedor, setMostrarFormularioVendedor] = useState(false);
   useEffect(()=>{
     let active=true;
     (async()=>{
@@ -34,6 +59,84 @@ function App(){
     return()=>{active=false};
   },[]);
   useEffect(()=>{ if(notice){const t=setTimeout(()=>setNotice(''),3200);return()=>clearTimeout(t)}},[notice]);
+  const carregarVendedores = async () => {
+  setCarregandoVendedores(true);
+
+  try {
+    const resultado = await listarVendedores();
+    setVendedores(resultado.vendedores || []);
+  } catch (error) {
+    console.error(error);
+    setNotice(error.message || 'Não foi possível carregar os vendedores.');
+  } finally {
+    setCarregandoVendedores(false);
+  }
+};
+useEffect(() => {
+  if (page === 'admin' && logged && role === 'admin') {
+    carregarVendedores();
+  }
+}, [page, logged, role]);
+const salvarVendedor = async (e) => {
+  e.preventDefault();
+
+  try {
+    if (vendedorEditando) {
+      await editarVendedor({
+        id: vendedorEditando.id,
+        ...formVendedor
+      });
+      setNotice('Vendedor atualizado com sucesso!');
+    } else {
+      await cadastrarVendedor(formVendedor);
+      setNotice('Vendedor cadastrado com sucesso!');
+    }
+
+    setFormVendedor({
+      nome: '',
+      usuario: '',
+      senha: '',
+      filial: 'Matriz'
+    });
+
+    setVendedorEditando(null);
+    setMostrarFormularioVendedor(false);
+    await carregarVendedores();
+  } catch (error) {
+    setNotice(error.message || 'Não foi possível salvar o vendedor.');
+  }
+};
+const alternarStatusVendedor = async (vendedor) => {
+  const novoStatus = !vendedor.ativo;
+
+  try {
+    await alterarStatusVendedor(vendedor.id, novoStatus);
+    setNotice(novoStatus
+      ? 'Vendedor reativado com sucesso!'
+      : 'Vendedor desativado com sucesso!'
+    );
+    await carregarVendedores();
+  } catch (error) {
+    setNotice(error.message || 'Não foi possível alterar o status.');
+  }
+};
+const solicitarNovaSenha = async (vendedor) => {
+  const novaSenha = prompt(`Digite a nova senha para ${vendedor.nome}:`);
+
+  if (!novaSenha) return;
+
+  if (novaSenha.length < 6) {
+    setNotice('A senha precisa ter pelo menos 6 caracteres.');
+    return;
+  }
+
+  try {
+    await redefinirSenhaVendedor(vendedor.id, novaSenha);
+    setNotice('Senha redefinida com sucesso!');
+  } catch (error) {
+    setNotice(error.message || 'Não foi possível redefinir a senha.');
+  }
+};
   const stats = useMemo(()=>({total:requests.length,pending:requests.filter(r=>r.status==='Aguardando atendimento').length,quotes:requests.filter(r=>r.status==='Em orçamento').length,done:requests.filter(r=>r.status==='Atendido').length}),[requests]);
   const addItem=()=>setItems(v=>[...v,{name:'',qty:1}]);
   const updateItem=(i,k,v)=>setItems(old=>old.map((x,n)=>n===i?{...x,[k]:v}:x));
@@ -148,11 +251,11 @@ function App(){
       <div className="brand"><div className="brand-logo-wrap"><img className="brand-logo" src={`${import.meta.env.BASE_URL}ibad-logo.png`} alt="iBAD Autopeças" /></div><div className="brand-copy"><b>iBAD <span>AUTOPEÇAS</span></b><small>Central de atendimento</small></div><button className="mobile-close" onClick={()=>setMobileMenu(false)}><X/></button></div>
       <div className="side-label">MENU PRINCIPAL</div>
       {nav.map(n=><button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>go(n.id)}>{n.id==='mechanic'?<Wrench size={18}/>:n.id==='seller'?<Store size={18}/>:<LayoutDashboard size={18}/>}<span>{n.label}</span>{page===n.id&&<span className="nav-dot"/>}</button>)}
-      <div className="sidebar-bottom"><div className="status-indicator"/><div><b>Portal conectado</b><small>Solicitações no banco online</small></div></div>
+      
     </aside>
     {mobileMenu&&<div className="scrim" onClick={()=>setMobileMenu(false)}/>}
     <main className="main">
-      <header className="topbar"><button className="menu-toggle" onClick={()=>setMobileMenu(true)}><Menu/></button><div className="crumb">iBAD Autopeças <span>/</span> {nav.find(n=>n.id===page)?.label}</div><div className="top-right"><span className="demo-pill"><i/> DEMO</span>{logged&&<button className="user-chip" onClick={logout}>{sellerName.slice(0,1).toUpperCase()} <span>{sellerName}</span></button>}</div></header>
+      <header className="topbar"><button className="menu-toggle" onClick={()=>setMobileMenu(true)}><Menu/></button><div className="crumb">iBAD Autopeças <span>/</span> {nav.find(n=>n.id===page)?.label}</div><div className="top-right">{logged&&<button className="user-chip" onClick={logout}>{sellerName.slice(0,1).toUpperCase()} <span>{sellerName}</span></button>}</div></header>
       <div className="content">
         {page==='mechanic'&&<>
           <div className="page-heading"><div><div className="eyebrow">ÁREA EXTERNA</div><h1>Solicitar peças</h1><p>Cadastre as peças que sua oficina precisa e receba um código de acompanhamento.</p></div><div className="heading-icon"><Wrench size={25}/></div></div>
@@ -177,9 +280,137 @@ function App(){
           {selected&&<RequestSummary request={selected} onDecision={decideQuote}/>}
         </>}
         {page==='seller'&&<>{!logged?<TeamLogin login={login} setLogin={setLogin} onSubmit={loginSubmit} title="Painel do vendedor"/>:<SellerPanel requests={requests} query={query} setQuery={setQuery} selected={selected} setSelected={setSelected} findRequest={findRequest} patchItem={patchItem} total={total} sellerName={sellerName} setNotice={setNotice} onDelete={deleteRequest} onSaveQuote={saveQuote} saving={saving} onRefresh={refreshRequests}/>}</>}
-        {page==='admin'&&(!logged?<TeamLogin login={login} setLogin={setLogin} onSubmit={loginSubmit} title="Visão administrativa"/>:role!=='admin'?<div className="panel empty-state"><div className="empty-icon"><LayoutDashboard/></div><h3>Acesso restrito</h3><p>Seu perfil não possui permissão de administrador.</p><button className="secondary-btn" onClick={()=>go('seller')}>Voltar ao painel do vendedor</button></div>:<><div className="page-heading"><div><div className="eyebrow">GESTÃO DA REDE</div><h1>Visão geral</h1><p>Acompanhe as solicitações registradas no banco da iBAD.</p></div><div className="heading-icon"><LayoutDashboard size={25}/></div></div><div className="stats-grid"><Stat icon={<ClipboardList/>} label="Solicitações" value={stats.total} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando" value={stats.pending} tone="orange"/><Stat icon={<Package/>} label="Em orçamento" value={stats.quotes} tone="purple"/><Stat icon={<CheckCircle2/>} label="Atendidas" value={stats.done} tone="green"/></div><div className="panel"><div className="panel-heading"><div><h2>Solicitações recentes</h2><p>Pedidos registrados no Supabase.</p></div><button className="secondary-btn small" onClick={refreshRequests}><RefreshCw size={14}/> Atualizar lista</button></div><RequestTable requests={requests} onSelect={r=>{setSelected(r);setQuery(r.id);setPage('seller')}}/></div><div className="branches-panel"><div className="panel-heading"><div><h2>Unidades da rede</h2><p>Filiais cadastradas no projeto.</p></div><span className="count-pill">05 unidades</span></div><div className="branches-grid">{BRANCHES.map((b,i)=><div className="branch-card" key={b}><div className="branch-icon"><Store size={18}/></div><div><b>{b}</b><small>{i===0?'Unidade principal':'Filial'}</small></div><span className="live-dot"/></div>)}</div></div></>)}
+        {page==='admin'&&(!logged?<TeamLogin login={login} setLogin={setLogin} onSubmit={loginSubmit} title="Visão administrativa"/>:role!=='admin'?<div className="panel empty-state"><div className="empty-icon"><LayoutDashboard/></div><h3>Acesso restrito</h3><p>Seu perfil não possui permissão de administrador.</p><button className="secondary-btn" onClick={()=>go('seller')}>Voltar ao painel do vendedor</button></div>:<><div className="page-heading"><div><div className="eyebrow">GESTÃO DA REDE</div><h1>Visão geral</h1><p>Acompanhe as solicitações registradas no banco da iBAD.</p></div><div className="heading-icon"><LayoutDashboard size={25}/></div></div><div className="stats-grid"><Stat icon={<ClipboardList/>} label="Solicitações" value={stats.total} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando" value={stats.pending} tone="orange"/><Stat icon={<Package/>} label="Em orçamento" value={stats.quotes} tone="purple"/><Stat icon={<CheckCircle2/>} label="Atendidas" value={stats.done} tone="green"/></div><div className="panel"><div className="panel-heading"><div><h2>Solicitações recentes</h2><p>Pedidos registrados no Supabase.</p></div><button className="secondary-btn small" onClick={refreshRequests}><RefreshCw size={14}/> Atualizar lista</button></div><RequestTable requests={requests} onSelect={r=>{setSelected(r);setQuery(r.id);setPage('seller')}}/></div><div className="branches-panel"><div className="panel-heading"><div><h2>Unidades da rede</h2><p>Filiais cadastradas no projeto.</p></div><span className="count-pill">05 unidades</span></div><div className="branches-grid">{BRANCHES.map((b,i)=><div className="branch-card" key={b}><div className="branch-icon"><Store size={18}/></div><div><b>{b}</b><small>{i===0?'Unidade principal':'Filial'}</small></div><span className="live-dot"/></div>)}</div><div className="panel" style={{marginTop:24}}>
+  <div className="panel-heading">
+    <div>
+      <h2>Gerenciar vendedores</h2>
+      <p>Cadastre e administre os acessos da equipe iBAD.</p>
+    </div>
+    <button
+      className="primary-btn"
+      onClick={() => {
+        setVendedorEditando(null);
+        setFormVendedor({
+          nome: '',
+          usuario: '',
+          senha: '',
+          filial: 'Matriz'
+        });
+        setMostrarFormularioVendedor(true);
+      }}
+    >
+      <Plus size={16}/> Novo vendedor
+    </button>
+  </div>
+
+  {mostrarFormularioVendedor && (
+    <form onSubmit={salvarVendedor} className="vendor-form">
+      <h3>{vendedorEditando ? 'Editar vendedor' : 'Cadastrar vendedor'}</h3>
+
+      <label>Nome completo</label>
+      <input
+        required
+        value={formVendedor.nome}
+        onChange={e=>setFormVendedor({...formVendedor,nome:e.target.value})}
+        placeholder="Nome do vendedor"
+      />
+
+      <label>Usuário de acesso</label>
+      <input
+        required
+        value={formVendedor.usuario}
+        onChange={e=>setFormVendedor({...formVendedor,usuario:e.target.value})}
+        placeholder="Ex.: joao.silva"
+      />
+
+      {!vendedorEditando && (
+        <>
+          <label>Senha inicial</label>
+          <input
+            required
+            minLength={6}
+            type="password"
+            value={formVendedor.senha}
+            onChange={e=>setFormVendedor({...formVendedor,senha:e.target.value})}
+            placeholder="Mínimo de 6 caracteres"
+          />
+        </>
+      )}
+
+      <label>Filial</label>
+      <select
+        value={formVendedor.filial}
+        onChange={e=>setFormVendedor({...formVendedor,filial:e.target.value})}
+      >
+        {BRANCHES.map(b=><option key={b} value={b}>{b}</option>)}
+      </select>
+
+      <div className="form-actions">
+        <button type="submit" className="primary-btn">
+          {vendedorEditando ? 'Salvar alterações' : 'Cadastrar vendedor'}
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={()=>setMostrarFormularioVendedor(false)}
+        >
+          Cancelar
+        </button>
       </div>
-      <footer className="footer"><span>© 2026 iBAD Autopeças</span><span>Protótipo funcional · Não conectado ao estoque da empresa</span></footer>
+    </form>
+  )}
+
+  <div className="vendor-list">
+    <h3>Vendedores cadastrados</h3>
+
+    {carregandoVendedores ? (
+      <p>Carregando vendedores...</p>
+    ) : vendedores.length === 0 ? (
+      <p>Nenhum vendedor cadastrado ainda.</p>
+    ) : vendedores.map(v=>(
+      <div className="branch-card" key={v.id}>
+        <div className="branch-icon"><Store size={18}/></div>
+        <div style={{flex:1}}>
+          <b>{v.nome}</b>
+          <small>@{v.usuario} · {v.filial}</small>
+          <small>{v.ativo ? 'Ativo' : 'Desativado'}</small>
+        </div>
+
+        <button
+          className="secondary-btn small"
+          onClick={()=>{
+            setVendedorEditando(v);
+            setFormVendedor({
+              nome:v.nome || '',
+              usuario:v.usuario || '',
+              senha:'',
+              filial:v.filial || 'Matriz'
+            });
+            setMostrarFormularioVendedor(true);
+          }}
+        >
+          Editar
+        </button>
+
+        <button
+          className="secondary-btn small"
+          onClick={()=>solicitarNovaSenha(v)}
+        >
+          Senha
+        </button>
+
+        <button
+          className="secondary-btn small"
+          onClick={()=>alternarStatusVendedor(v)}
+        >
+          {v.ativo ? 'Desativar' : 'Reativar'}
+        </button>
+      </div>
+    ))}
+  </div>
+</div></div></>)}
+      </div>
+      <footer className="footer"><span>© 2026 iBAD Autopeças</span><span></span></footer>
     </main>
     {notice&&<div className="toast"><CheckCircle2 size={17}/>{notice}</div>}
   </div>
@@ -187,7 +418,7 @@ function App(){
 
 
 function TeamLogin({login,setLogin,onSubmit,title}){
-  return <div className="login-wrap"><div className="login-card"><div className="login-icon"><Store/></div><div className="eyebrow">ACESSO INTERNO</div><h1>{title}</h1><p>Entre com seu e-mail e senha cadastrados pela administração da iBAD.</p><form onSubmit={onSubmit}><label>E-mail<input type="email" autoComplete="username" value={login.user} onChange={e=>setLogin({...login,user:e.target.value})} placeholder="nome@ibad.com.br" required/></label><label>Senha<input type="password" autoComplete="current-password" value={login.pass} onChange={e=>setLogin({...login,pass:e.target.value})} placeholder="Sua senha" required/></label><button className="primary-btn full" type="submit"><LogIn size={17}/> Entrar com segurança</button><small>O acesso depende de uma conta ativa no Supabase e de um perfil cadastrado pela administração.</small></form></div></div>
+  return <div className="login-wrap"><div className="login-card"><div className="login-icon"><Store/></div><div className="eyebrow">ACESSO INTERNO</div><h1>{title}</h1><p>Entre com seu e-mail e senha cadastrados pela administração da iBAD.</p><form onSubmit={onSubmit}><label>E-mail<input type="" autoComplete="username" value={login.user} onChange={e=>setLogin({...login,user:e.target.value})} placeholder="nome@ibad.com.br" required/></label><label>Senha<input type="password" autoComplete="current-password" value={login.pass} onChange={e=>setLogin({...login,pass:e.target.value})} placeholder="Sua senha" required/></label><button className="primary-btn full" type="submit"><LogIn size={17}/> Entrar com segurança</button><small>O acesso depende de uma conta ativa no Supabase e de um perfil cadastrado pela administração.</small></form></div></div>
 }
 
 function Stat({icon,label,value,tone}){return <div className="stat-card"><div className={`stat-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong></div></div>}
@@ -198,7 +429,7 @@ function RequestSummary({request:r,onDecision}){
  const unavailable=x.availability==='Indisponível';
  const price=Number(String(x.price||0).replace(',','.'));
  return <div key={i}><span>{x.name} <small>× {x.qty} · {unavailable?'Sem estoque':(x.branch||'Filial não informada')}</small></span><b className={unavailable?'unavailable-price':''}>{unavailable?'SEM ESTOQUE':price>0?money(price*x.qty):'Aguardando preço'}</b></div>;
- })}</div>{ready&&awaiting&&<div className="mechanic-decision"><b>Seu orçamento está pronto!</b><p>Confira os valores e informe se deseja aceitar ou recusar esta proposta.</p><div className="decision-buttons"><button className="accept-quote" onClick={()=>onDecision(r.id,'Aprovado pelo mecânico')}><CheckCircle2 size={16}/> Aceitar orçamento</button><button className="decline-quote" onClick={()=>onDecision(r.id,'Recusado pelo mecânico')}><X size={16}/> Recusar orçamento</button></div></div>}{r.decisionReason&&<p className="decision-note">Motivo informado: {r.decisionReason}</p>}</div>}
+ })}</div>{r.seller && <p>Orçamento preparado por: {r.seller}</p>}{ready&&awaiting&&<div className="mechanic-decision"><b>Seu orçamento está pronto!</b><p>Confira os valores e informe se deseja aceitar ou recusar esta proposta.</p><div className="decision-buttons"><button className="accept-quote" onClick={()=>onDecision(r.id,'Aprovado pelo mecânico')}><CheckCircle2 size={16}/> Aceitar orçamento</button><button className="decline-quote" onClick={()=>onDecision(r.id,'Recusado pelo mecânico')}><X size={16}/> Recusar orçamento</button></div></div>}{r.decisionReason&&<p className="decision-note">Motivo informado: {r.decisionReason}</p>}</div>}
 function Status({status}){let c=['Atendido','Aprovado pelo mecânico'].includes(status)?'green':['Em orçamento','Aguardando resposta do mecânico'].includes(status)?'purple':['Cancelado','Recusado pelo mecânico'].includes(status)?'red':'orange';return <span className={`status ${c}`}>{status}</span>}
 function RequestTable({requests,onSelect}){if(!requests.length)return <div className="empty">Nenhuma solicitação cadastrada.</div>;return <div className="table-wrap"><table><thead><tr><th>CÓDIGO</th><th>OFICINA / VEÍCULO</th><th>DATA</th><th>STATUS</th><th></th></tr></thead><tbody>{requests.map(r=><tr key={r.id}><td><b className="mono">{r.id}</b></td><td><b>{r.workshop}</b><small>{r.vehicle}</small></td><td>{date(r.createdAt)}</td><td><Status status={r.status}/></td><td><button className="text-btn" onClick={()=>onSelect(r)}>Abrir <ArrowUpRight size={14}/></button></td></tr>)}</tbody></table></div>}
 function SellerPanel({requests,query,setQuery,selected,setSelected,findRequest,patchItem,total,sellerName,setNotice,onDelete,onSaveQuote,saving,onRefresh}){
@@ -226,7 +457,10 @@ function SellerPanel({requests,query,setQuery,selected,setSelected,findRequest,p
    </section>
    <section className="seller-detail-column">
     <div className="panel search-panel compact-search"><div className="search-title"><div className="search-icon"><Search/></div><div><b>Buscar pelo código</b><span>Use o código informado pelo mecânico.</span></div></div><div className="search-controls"><input value={query} onChange={e=>setQuery(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&findRequest()} placeholder="AUTO-58291"/><button className="primary-btn" onClick={findRequest}><Search size={16}/></button></div></div>
-    {selected?<div className="panel quote-panel"><div className="panel-heading"><div><div className="eyebrow">SOLICITAÇÃO {selected.id}</div><h2>{selected.workshop}</h2><p>{selected.mechanic} · {selected.vehicle} {selected.plate&&'· '+selected.plate}</p></div><Status status={selected.status}/></div>{selected.phone&&<div className="meta-line">Telefone: {selected.phone}</div>}{selected.notes&&<div className="notes-box">Observações: {selected.notes}</div>}<div className="quote-table"><div className="quote-head"><span>PEÇA / QUANTIDADE</span><span>PREÇO UNITÁRIO</span><span>DISPONIBILIDADE</span></div>{selected.items.map((it,i)=><div className="quote-row" key={i}><div><b>{it.name}</b><small>Quantidade: {it.qty}</small></div><label className="price-input"><span>R$</span><input type="text" inputMode="decimal" value={it.price ?? ''} placeholder="0,00" onChange={e=>{const v=e.target.value;if(/^\d*([.,]\d{0,2})?$/.test(v))patchItem(i,{price:v});}}/></label><div className="availability-fields"><select value={it.availability||'A consultar'} onChange={e=>patchItem(i,{availability:e.target.value})}><option>A consultar</option><option>Disponível</option><option>Indisponível</option><option>Precisa transferir</option></select><select value={it.branch||''} onChange={e=>patchItem(i,{branch:e.target.value})}><option value="">Filial / origem</option>{BRANCHES.map(b=><option key={b}>{b}</option>)}</select></div></div>)}</div><div className="quote-total"><span>Valor total do orçamento</span><strong>{money(total)}</strong></div><div className="quote-actions"><button className="delete-request-btn" onClick={()=>onDelete(selected.id)}><Trash2 size={16}/> Excluir solicitação</button><button className="primary-btn" onClick={onSaveQuote} disabled={saving}>{saving?'Salvando...':<><CheckCircle2 size={17}/> Salvar orçamento</>}</button></div>{['Aprovado pelo mecânico','Recusado pelo mecânico'].includes(selected.status)&&<div className="approved-contact">
+    {selected?<div className="panel quote-panel"><div className="panel-heading"><div><div className="eyebrow">SOLICITAÇÃO {selected.id}</div><h2>{selected.workshop}</h2><p>{selected.mechanic} · {selected.vehicle} {selected.plate&&'· '+selected.plate}</p></div><Status status={selected.status}/></div>{selected.phone&&<div className="meta-line">Telefone: {selected.phone}</div>}{selected.notes&&<div className="notes-box">Observações: {selected.notes}</div>}<div className="quote-table"><div className="quote-head"><span>PEÇA / QUANTIDADE</span><span>PREÇO UNITÁRIO</span><span>DISPONIBILIDADE</span></div>
+    {selected.seller && (
+  <p>Orçamento preparado por: {selected.seller}</p>
+)}{selected.items.map((it,i)=><div className="quote-row" key={i}><div><b>{it.name}</b><small>Quantidade: {it.qty}</small></div><label className="price-input"><span>R$</span><input type="text" inputMode="decimal" value={it.price ?? ''} placeholder="0,00" onChange={e=>{const v=e.target.value;if(/^\d*([.,]\d{0,2})?$/.test(v))patchItem(i,{price:v});}}/></label><div className="availability-fields"><select value={it.availability||'A consultar'} onChange={e=>patchItem(i,{availability:e.target.value})}><option>A consultar</option><option>Disponível</option><option>Indisponível</option><option>Precisa transferir</option></select><select value={it.branch||''} onChange={e=>patchItem(i,{branch:e.target.value})}><option value="">Filial / origem</option>{BRANCHES.map(b=><option key={b}>{b}</option>)}</select></div></div>)}</div><div className="quote-total"><span>Valor total do orçamento</span><strong>{money(total)}</strong></div><div className="quote-actions"><button className="delete-request-btn" onClick={()=>onDelete(selected.id)}><Trash2 size={16}/> Excluir solicitação</button><button className="primary-btn" onClick={onSaveQuote} disabled={saving}>{saving?'Salvando...':<><CheckCircle2 size={17}/> Salvar orçamento</>}</button></div>{['Aprovado pelo mecânico','Recusado pelo mecânico'].includes(selected.status)&&<div className="approved-contact">
 <b>{selected.status==='Aprovado pelo mecânico'?'Orçamento aprovado pelo mecânico':'Orçamento recusado pelo mecânico'}</b>
 <p>{selected.status==='Aprovado pelo mecânico'?'Entre em contato para combinar retirada, entrega e pagamento.':'Se desejar, entre em contato para entender o motivo da recusa, esclarecer dúvidas ou oferecer alternativas. A recusa permanece registrada.'}</p>
 {selected.decisionReason&&selected.status==='Recusado pelo mecânico'&&<p>Motivo informado: {selected.decisionReason}</p>}
