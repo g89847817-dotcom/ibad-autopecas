@@ -145,7 +145,7 @@ function App(){
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileMenu?'open':''}`}>
-      <div className="brand"><div className="brand-logo-wrap"><img className="brand-logo" src="/ibad-logo.png" alt="iBAD Autopeças" /></div><div className="brand-copy"><b>iBAD <span>AUTOPEÇAS</span></b><small>Central de atendimento</small></div><button className="mobile-close" onClick={()=>setMobileMenu(false)}><X/></button></div>
+      <div className="brand"><div className="brand-logo-wrap"><img className="brand-logo" src={`${import.meta.env.BASE_URL}ibad-logo.png`} alt="iBAD Autopeças" /></div><div className="brand-copy"><b>iBAD <span>AUTOPEÇAS</span></b><small>Central de atendimento</small></div><button className="mobile-close" onClick={()=>setMobileMenu(false)}><X/></button></div>
       <div className="side-label">MENU PRINCIPAL</div>
       {nav.map(n=><button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>go(n.id)}>{n.id==='mechanic'?<Wrench size={18}/>:n.id==='seller'?<Store size={18}/>:<LayoutDashboard size={18}/>}<span>{n.label}</span>{page===n.id&&<span className="nav-dot"/>}</button>)}
       <div className="sidebar-bottom"><div className="status-indicator"/><div><b>Portal conectado</b><small>Solicitações no banco online</small></div></div>
